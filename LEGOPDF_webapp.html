@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark light">
+<title>LEGO PDF EDITOR</title>
+
+<!-- CDN Könyvtárak -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --lego-red: #E3000F;
+    --lego-red-dark: #B5000C;
+    --lego-yellow: #FFD500;
+    --lego-blue: #0068C9;
+    --lego-green: #009A44;
+
+    --bg: #18191c;
+    --surface: #232427;
+    --surface-2: #2b2c30;
+    --surface-3: #313236;
+    --border: rgba(255,255,255,0.09);
+    --border-strong: rgba(255,255,255,0.18);
+    --text: #f2f1ec;
+    --text-muted: #9c9ca2;
+    --text-faint: #6d6e73;
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.35);
+    --shadow-md: 0 10px 28px rgba(0,0,0,0.45);
+    --shadow-lg: 0 26px 64px rgba(0,0,0,0.6);
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --radius-pill: 999px;
+    --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  [data-theme="light"] {
+    --bg: #e9ebf0;
+    --surface: #ffffff;
+    --surface-2: #f2f3f6;
+    --surface-3: #e7e9ee;
+    --border: rgba(20,20,30,0.1);
+    --border-strong: rgba(20,20,30,0.2);
+    --text: #1b1c20;
+    --text-muted: #6a6b72;
+    --text-faint: #9799a1;
+    --shadow-sm: 0 2px 8px rgba(20,20,30,0.08);
+    --shadow-md: 0 10px 24px rgba(20,20,30,0.1);
+    --shadow-lg: 0 26px 56px rgba(20,20,30,0.18);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  ::selection { background: rgba(227,0,15,0.3); color: var(--text); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+  :focus-visible { outline: 2px solid var(--lego-red); outline-offset: 2px; }
+
+  button, input, select, textarea { font-family: var(--font); }
+
+  /* ===== SHELL ===== */
+  .app-shell { display: flex; min-height: 100vh; }
+
+  .rail {
+    width: 68px;
+    flex: none;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 0;
+    gap: 6px;
+  }
+
+  .rail-logo { margin-bottom: 14px; }
+  .brick {
+    width: 34px; height: 26px; position: relative;
+    background: linear-gradient(160deg, var(--lego-red), var(--lego-red-dark));
+    border-radius: 6px;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .brick::before, .brick::after {
+    content: ""; position: absolute; top: -6px; width: 10px; height: 8px; border-radius: 3px;
+    background: linear-gradient(160deg, var(--lego-red), var(--lego-red-dark));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+  .brick::before { left: 4px; }
+  .brick::after { right: 4px; }
+
+  .rail-btn {
+    position: relative;
+    width: 42px; height: 42px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  }
+  .rail-btn svg { width: 19px; height: 19px; }
+  .rail-btn:hover { background: var(--surface-2); color: var(--text); }
+  .rail-btn:active { transform: scale(0.93); }
+  .rail-btn.btn-file { overflow: hidden; }
+  .rail-btn.btn-file input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .rail-btn::after {
+    content: attr(data-tip);
+    position: absolute; left: 100%; top: 50%; transform: translate(6px, -50%);
+    background: #0a0a0b; color: #fff; padding: 6px 10px; border-radius: 7px;
+    font-size: 12px; font-weight: 500; white-space: nowrap;
+    opacity: 0; pointer-events: none; z-index: 200;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    box-shadow: var(--shadow-md);
+  }
+  .rail-btn:hover::after { opacity: 1; transform: translate(10px, -50%); }
+
+  .rail-spacer { flex: 1; }
+
+  /* ===== WORKSPACE ===== */
+  .workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 18px;
+    padding: 16px 26px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .topbar-left { display: flex; flex-direction: column; gap: 2px; }
+  .topbar-left h1 { margin: 0; font-size: 17px; font-weight: 750; letter-spacing: -0.3px; }
+  .page-count { font-size: 12px; color: var(--text-muted); font-weight: 550; }
+
+  .topbar-search {
+    flex: 1; min-width: 160px; max-width: 340px;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    padding: 8px 14px;
+    color: var(--text-muted);
+  }
+  .topbar-search svg { width: 15px; height: 15px; flex: none; }
+  .topbar-search input {
+    border: none; background: transparent; outline: none; color: var(--text);
+    font-size: 13px; width: 100%;
+  }
+  .topbar-search input::placeholder { color: var(--text-faint); }
+
+  .topbar-actions { display: flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+
+  .btn {
+    border: none; border-radius: var(--radius-pill);
+    padding: 9px 16px; font-size: 13px; font-weight: 620;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+    transition: transform 0.15s cubic-bezier(0.16,1,0.3,1), box-shadow 0.15s ease, background-color 0.15s ease, opacity .15s ease;
+    white-space: nowrap;
+  }
+  .btn svg { width: 15px; height: 15px; }
+  .btn:disabled { opacity: 0.55; cursor: default; transform: none !important; }
+  .btn:active:not(:disabled) { transform: scale(0.96); }
+
+  .btn-primary { background: var(--lego-red); color: #fff; box-shadow: 0 3px 10px rgba(227,0,15,0.35); }
+  .btn-primary:hover:not(:disabled) { background: #ff1424; box-shadow: 0 5px 16px rgba(227,0,15,0.45); }
+
+  .btn-secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface-3); }
+
+  .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-ghost:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
+
+  .spinner {
+    width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;
+    display: inline-block; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== GRID ===== */
+  #page-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    align-content: start;
+    gap: 22px;
+    padding: 28px;
+    transition: background-color 0.15s ease;
+  }
+  #page-grid[data-density="sm"] { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 16px; }
+  #page-grid[data-density="lg"] { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 26px; }
+
+  #page-grid.drag-over { background: rgba(227,0,15,0.06); outline: 2px dashed var(--lego-red); outline-offset: -8px; }
+
+  #page-grid:empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    min-height: 360px;
+  }
+  #page-grid:empty::before {
+    content: ""; display: block; width: 46px; height: 34px; margin-bottom: 18px;
+    background: var(--surface-2); border: 2px dashed var(--border-strong); border-radius: 8px;
+  }
+  #page-grid:empty::after {
+    content: "Húzz ide PDF vagy kép fájlokat\A vagy használd a bal oldali eszköztárat";
+    white-space: pre-line;
+    color: var(--text-muted); font-size: 13.5px; font-weight: 550; line-height: 1.7;
+  }
+
+  #page-grid.no-results { display: flex; align-items: center; justify-content: center; min-height: 200px; }
+  #page-grid.no-results::before { content: "Nincs találat a keresésre"; color: var(--text-muted); font-size: 13.5px; font-weight: 550; }
+
+  /* ===== CARD ===== */
+  .page-card {
+    position: relative;
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    padding: 18px 12px 12px;
+    box-shadow: var(--shadow-sm);
+    cursor: grab;
+    display: flex; flex-direction: column; align-items: center;
+    border: 2px solid transparent;
+    user-select: none;
+    transition: transform 0.18s cubic-bezier(0.16,1,0.3,1), box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .page-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  .page-card:active { cursor: grabbing; }
+  .page-card.selected { border-color: var(--lego-red); }
+  .page-card.focused { outline: 2px solid var(--lego-blue); outline-offset: 2px; }
+  .page-card.filtered-out { display: none; }
+  .page-card.sortable-fallback { opacity: 0.9; }
+
+  .stud-row { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); display: flex; gap: 9px; z-index: 2; }
+  .stud { width: 13px; height: 13px; border-radius: 50%; box-shadow: inset 0 -2px 2px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.35); }
+  .page-card[data-type="pdf"] .stud { background: linear-gradient(160deg, #3b9bff, var(--lego-blue)); }
+  .page-card[data-type="image"] .stud { background: linear-gradient(160deg, #ffe154, var(--lego-yellow)); }
+  .page-card[data-type="blank"] .stud { background: linear-gradient(160deg, #35c46a, var(--lego-green)); }
+
+  .select-checkbox {
+    position: absolute; top: 10px; left: 10px; z-index: 4;
+    width: 18px; height: 18px; cursor: pointer; accent-color: var(--lego-red);
+  }
+
+  .order-badge {
+    position: absolute; top: 9px; right: 9px; z-index: 4;
+    min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+    background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  [data-theme="light"] .order-badge { background: rgba(20,20,25,0.72); }
+
+  .thumb-wrap { position: relative; width: 100%; display: flex; justify-content: center; }
+  .thumb-wrap canvas {
+    max-width: 100%; height: auto; border-radius: var(--radius-sm);
+    background: #ffffff; box-shadow: 0 3px 12px rgba(0,0,0,0.45);
+  }
+
+  .card-actions {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: center; gap: 6px;
+    padding: 22px 8px 8px;
+    background: linear-gradient(to top, rgba(0,0,0,0.62), transparent);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    opacity: 0; transform: translateY(6px); pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .page-card:hover .card-actions { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+  .action-btn {
+    width: 27px; height: 27px; border-radius: 50%;
+    background: rgba(255,255,255,0.14); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.25); color: #fff;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .action-btn svg { width: 13px; height: 13px; }
+  .action-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
+  .action-btn.delete:hover { background: var(--lego-red); border-color: transparent; }
+
+  .page-info { font-size: 11px; color: var(--text-muted); margin-top: 10px; text-align: center; font-weight: 550; line-height: 1.4; }
+  .img-options-btn { margin-top: 9px; font-size: 11px; padding: 5px 12px; }
+
+  /* ===== SELECTION BAR ===== */
+  .selection-bar {
+    position: fixed; left: 50%; bottom: 22px; z-index: 300;
+    transform: translate(-50%, 130%); opacity: 0; pointer-events: none;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill); box-shadow: var(--shadow-lg);
+    padding: 8px 10px 8px 18px;
+    display: flex; align-items: center; gap: 14px;
+    transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease;
+  }
+  .selection-bar.active { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+  .selection-bar span#selection-count { font-size: 13px; font-weight: 650; white-space: nowrap; }
+  .selection-actions { display: flex; gap: 6px; }
+  .sel-btn {
+    width: 34px; height: 34px; border-radius: 50%; border: none;
+    background: var(--surface-2); color: var(--text); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .sel-btn svg { width: 15px; height: 15px; }
+  .sel-btn:hover:not(:disabled) { background: var(--surface-3); transform: translateY(-1px); }
+  .sel-btn:disabled { opacity: 0.35; cursor: default; }
+  .sel-btn.danger:hover { background: var(--lego-red); color: #fff; }
+  .sel-clear {
+    background: transparent; border: none; color: var(--text-muted);
+    font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 6px 8px;
+  }
+  .sel-clear:hover { color: var(--text); }
+
+  /* ===== UNDO TOAST ===== */
+  .undo-toast {
+    position: fixed; left: 22px; bottom: 22px; z-index: 300;
+    transform: translateY(130%); opacity: 0; pointer-events: none;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill); box-shadow: var(--shadow-lg);
+    padding: 10px 10px 10px 18px;
+    display: flex; align-items: center; gap: 14px; font-size: 13px; font-weight: 550;
+    transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease;
+  }
+  .undo-toast.active { transform: translateY(0); opacity: 1; pointer-events: auto; }
+  .undo-toast button {
+    background: var(--lego-red); color: #fff; border: none; border-radius: var(--radius-pill);
+    padding: 7px 14px; font-size: 12.5px; font-weight: 650; cursor: pointer;
+  }
+  .undo-toast button:hover { background: #ff1424; }
+
+  /* ===== MODALS ===== */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(6,6,7,0.6); backdrop-filter: blur(20px);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+    animation: fadeIn 0.18s ease-out;
+  }
+  .modal-overlay.active { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes popIn { from { opacity: 0; transform: scale(0.97) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+  .modal-content {
+    background: var(--surface); border: 1px solid var(--border-strong);
+    padding: 22px; border-radius: var(--radius-lg);
+    width: 85vw; max-width: 960px; max-height: 90vh;
+    display: flex; flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    animation: popIn 0.2s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .toolbar-modal { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+  .modal-heading { font-weight: 700; font-size: 14.5px; margin-right: auto; letter-spacing: -0.1px; }
+
+  .canvas-hint {
+    font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin: 0 0 12px;
+  }
+  .canvas-hint .tag-text { color: var(--lego-red); font-weight: 700; }
+  .canvas-hint .tag-image { color: var(--lego-blue); font-weight: 700; }
+
+  .canvas-wrapper {
+    position: relative; overflow: auto; max-height: 50vh;
+    border-radius: var(--radius-md); user-select: none; cursor: crosshair;
+    display: flex; justify-content: center; align-items: flex-start;
+    background: #101012; box-shadow: inset 0 0 0 1px var(--border);
+  }
+  #modal-canvas { display: block; max-width: 100%; height: auto; background: #fff; box-shadow: var(--shadow-md); }
+
+  .sel-box {
+    position: absolute; border: 2px solid var(--lego-red);
+    background: rgba(227,0,15,0.16); border-radius: 3px;
+    z-index: 10; box-shadow: 0 0 0 1px rgba(0,0,0,0.35);
+    cursor: move;
+  }
+  .sel-box.sel-box-image { border-color: var(--lego-blue); background: rgba(0,104,201,0.18); }
+
+  .sel-box-badge {
+    position: absolute; top: -9px; left: -9px; z-index: 11;
+    width: 19px; height: 19px; border-radius: 50%;
+    background: #ffffff; color: #111214; font-size: 11px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; pointer-events: none;
+    border: 2px solid var(--lego-red);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  }
+  .sel-box-image .sel-box-badge { border-color: var(--lego-blue); }
+
+  .sel-box-remove {
+    position: absolute; top: -9px; right: -9px; z-index: 11;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #0a0a0b; color: #fff; border: none; cursor: pointer;
+    font-size: 12px; line-height: 1; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sel-box-remove:hover { background: var(--lego-red); }
+
+  .sel-handle {
+    position: absolute; width: 10px; height: 10px; z-index: 12;
+    background: #fff; border: 2px solid var(--lego-red); border-radius: 50%;
+  }
+  .sel-box-image .sel-handle { border-color: var(--lego-blue); }
+  .sel-handle-nw { top: -6px; left: -6px; cursor: nwse-resize; }
+  .sel-handle-n  { top: -6px; left: 50%; margin-left: -5px; cursor: ns-resize; }
+  .sel-handle-ne { top: -6px; right: -6px; cursor: nesw-resize; }
+  .sel-handle-e  { top: 50%; right: -6px; margin-top: -5px; cursor: ew-resize; }
+  .sel-handle-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+  .sel-handle-s  { bottom: -6px; left: 50%; margin-left: -5px; cursor: ns-resize; }
+  .sel-handle-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+  .sel-handle-w  { top: 50%; left: -6px; margin-top: -5px; cursor: ew-resize; }
+
+  .ocr-container { margin-top: 16px; display: flex; flex-direction: column; gap: 9px; }
+  .ocr-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; font-weight: 650; flex-wrap: wrap; }
+  .ocr-header-actions { display: flex; gap: 8px; }
+
+  #ocr-result {
+    width: 100%; height: 100px; padding: 13px; border: 1px solid var(--border); border-radius: var(--radius-md);
+    font-family: var(--font); font-size: 13px; line-height: 1.55; resize: vertical; box-sizing: border-box;
+    background: var(--surface-2); color: var(--text); outline: none;
+  }
+  #ocr-result:focus { border-color: var(--lego-red); }
+  #ocr-result::placeholder { color: var(--text-faint); }
+
+  .settings-modal-content {
+    background: var(--surface); border: 1px solid var(--border-strong);
+    padding: 22px; border-radius: var(--radius-lg);
+    width: 380px; display: flex; flex-direction: column; gap: 13px;
+    box-shadow: var(--shadow-lg); max-height: 85vh; overflow-y: auto;
+    animation: popIn 0.2s cubic-bezier(0.16,1,0.3,1);
+  }
+  .settings-title { margin: 0; font-size: 16px; font-weight: 720; letter-spacing: -0.2px; }
+  .settings-divider { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
+  .settings-label { font-weight: 650; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .setting-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 500; gap: 10px; }
+
+  select, input[type="text"], input[type="number"], textarea {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px;
+  }
+  select:focus, input:focus, textarea:focus { border-color: var(--lego-red); }
+  input[type="checkbox"] { accent-color: var(--lego-red); width: 17px; height: 17px; cursor: pointer; }
+  input[type="range"] { accent-color: var(--lego-red); }
+
+  .text-box-panel { background: var(--surface-2); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); }
+
+  @media (max-width: 720px) {
+    .app-shell { flex-direction: column; }
+    .rail { width: 100%; flex-direction: row; padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--border); }
+    .rail-logo { margin-bottom: 0; margin-right: 6px; }
+    .rail-spacer { display: none; }
+    .rail-btn::after { top: 100%; left: 50%; transform: translate(-50%, 6px); }
+    .rail-btn:hover::after { transform: translate(-50%, 10px); }
+    .topbar { padding: 14px 16px; }
+    #page-grid { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="rail">
+    <div class="rail-logo"><div class="brick"></div></div>
+
+    <label class="rail-btn btn-file" data-tip="PDF hozzáadása">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M12 12v6"/></svg>
+      <input type="file" id="add-pdf-input" multiple accept="application/pdf">
+    </label>
+
+    <label class="rail-btn btn-file" data-tip="Kép beszúrása">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <input type="file" id="add-image-input" multiple accept="image/png, image/jpeg">
+    </label>
+
+    <button class="rail-btn" data-tip="Üres lap beszúrása" onclick="insertBlankPage()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v6M9 14h6"/></svg>
+    </button>
+
+    <div class="rail-spacer"></div>
+
+    <button class="rail-btn" id="density-toggle-btn" data-tip="Nézet mérete" onclick="cycleDensity()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    </button>
+
+    <button class="rail-btn" id="theme-toggle-btn" data-tip="Téma váltása" onclick="toggleTheme()"></button>
+  </aside>
+
+  <main class="workspace">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>LEGO PDF Editor</h1>
+        <span class="page-count" id="page-count">0 oldal</span>
+      </div>
+
+      <div class="topbar-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" id="search-input" placeholder="Keresés fájlnév alapján…">
+      </div>
+
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" onclick="toggleSelectAll()">Mind kijelöl</button>
+        <button class="btn btn-secondary" id="export-selected-btn" onclick="exportPDF(true)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Kijelöltek exportálása
+        </button>
+        <button class="btn btn-primary" id="export-all-btn" onclick="exportPDF(false)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Összes exportálása
+        </button>
+      </div>
+    </div>
+
+    <div id="page-grid" data-density="md"></div>
+  </main>
+</div>
+
+<!-- Kijelölés kontextus-eszköztár -->
+<div class="selection-bar" id="selection-bar">
+  <span id="selection-count">0 kiválasztva</span>
+  <div class="selection-actions">
+    <button class="sel-btn" id="dup-sel-btn" title="Duplikálás" onclick="duplicateSelectedSingle()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    </button>
+    <button class="sel-btn" title="Forgatás" onclick="rotateSelected()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+    </button>
+    <button class="sel-btn" title="Kijelöltek exportálása" onclick="exportPDF(true)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+    </button>
+    <button class="sel-btn danger" title="Törlés" onclick="deleteSelectedPages()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/></svg>
+    </button>
+  </div>
+  <button class="sel-clear" onclick="clearSelection()">Mégse</button>
+</div>
+
+<!-- Visszavonás toast -->
+<div class="undo-toast" id="undo-toast">
+  <span>Oldal(ak) törölve</span>
+  <button onclick="undoLastDelete()">Visszavonás</button>
+</div>
+
+<!-- Gyorsnézet Modal -->
+<div id="preview-modal" class="modal-overlay" onclick="closeModal()">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="toolbar-modal">
+      <span id="modal-title" class="modal-heading">Gyorsnézet</span>
+      <button class="btn btn-ghost" onclick="clearSelections()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/></svg>
+        Kijelölések törlése
+      </button>
+      <button class="btn btn-secondary" onclick="processAllOCR()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
+        OCR feldolgozás
+      </button>
+      <button class="btn btn-secondary" id="save-images-btn" onclick="saveAllCroppedImages()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        Képek mentése
+      </button>
+      <button class="btn btn-primary" style="border-radius:50%; width:32px; height:32px; padding:0; justify-content:center; background:var(--surface-3); color:var(--text); box-shadow:none;" onclick="closeModal()">✕</button>
+    </div>
+
+    <p class="canvas-hint">
+      Bal kattintás‑húzás: <span class="tag-text">piros</span> szövegterület (Shift+húzás = új szövegrész, megtartja az előzőt) ·
+      Jobb kattintás‑húzás: <span class="tag-image">kék</span> képterület (mindig hozzáadja az újat) ·
+      A doboz szélét/sarkát fogva átméretezheted, belsejét húzva mozgathatod
+    </p>
+
+    <div class="canvas-wrapper" id="canvas-wrapper">
+      <canvas id="modal-canvas"></canvas>
+    </div>
+
+    <div class="ocr-container">
+      <div class="ocr-header">
+        <span id="ocr-status">📝 Felismert szöveg:</span>
+        <div class="ocr-header-actions">
+          <button class="btn btn-ghost" id="extract-text-btn" style="font-size:11px; padding:5px 11px;" onclick="extractPdfText()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
+            Szövegréteg kinyerése
+          </button>
+          <button class="btn btn-ghost" style="font-size:11px; padding:5px 11px;" onclick="copyOcrText()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Másolás
+          </button>
+        </div>
+      </div>
+      <textarea id="ocr-result" placeholder="Jelölj ki egy területet OCR-hez, vagy nyerd ki a PDF szövegrétegét a fenti gombbal…"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- Oldal Beállítások Modal -->
+<div id="settings-modal" class="modal-overlay" onclick="closeSettings()">
+  <div class="settings-modal-content" onclick="event.stopPropagation()">
+    <h3 class="settings-title">Oldal beállítások</h3>
+
+    <div class="setting-row">
+      <label for="fit-checkbox">Kép lap szélességéhez igazítása:</label>
+      <input type="checkbox" id="fit-checkbox" onchange="updateImageFit(this.checked)">
+    </div>
+
+    <hr class="settings-divider">
+
+    <div class="settings-label">Képek az oldalon</div>
+    <div id="images-list-container" style="display:flex; flex-direction:column; gap:8px; max-height:100px; overflow-y:auto;"></div>
+
+    <label class="btn btn-secondary btn-file" style="justify-content:center; margin-top:4px; position:relative; overflow:hidden;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      Új kép beszúrása ide
+      <input type="file" accept="image/png, image/jpeg" onchange="addImageToCurrentPage(event)" style="position:absolute; inset:0; opacity:0; cursor:pointer;">
+    </label>
+
+    <hr class="settings-divider">
+
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span class="settings-label" style="text-transform:none; letter-spacing:normal; font-size:13px; color:var(--text);">✍️ Szövegdoboz az oldalon</span>
+      <button class="btn btn-secondary" style="font-size:11px; padding:4px 10px;" onclick="togglePageText()">
+        <span id="text-toggle-btn-label">+ Szöveg hozzáadása</span>
+      </button>
+    </div>
+
+    <div id="text-box-controls" class="text-box-panel" style="display:none; flex-direction:column; gap:9px;">
+      <textarea id="page-text-input" rows="3" placeholder="Írd ide a szöveget..." style="width:100%; box-sizing:border-box;" oninput="updatePageTextData()"></textarea>
+      <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">
+        Jelölj ki egy részt és nyomj <b>Ctrl/Cmd+B</b>-t a félkövérré tételéhez — ez <code>**két csillag közé**</code> teszi a kijelölt részt, ami csak a kártyán, a gyorsnézetben és a mentett PDF-ben jelenik meg vastagon.
+      </div>
+
+      <div class="setting-row">
+        <label>Betűméret (pt):</label>
+        <input type="number" id="page-text-size" value="16" min="8" max="72" onchange="updatePageTextData()" style="width:60px;">
+      </div>
+
+      <div class="setting-row">
+        <label>Igazítás:</label>
+        <select id="page-text-align" onchange="updatePageTextData()">
+          <option value="left">Balra</option>
+          <option value="center">Középre</option>
+          <option value="right">Jobbra</option>
+          <option value="justify">Sorkizárt</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <label>Szélesség (Margó):</label>
+        <input type="range" id="page-text-margin" min="10" max="150" value="20" oninput="updatePageTextData()">
+      </div>
+
+      <div class="setting-row">
+        <label>Formázás:</label>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="page-text-bold" onchange="updatePageTextData()"> Félkövér (egész szöveg)</label>
+          <input type="color" id="page-text-color" value="#000000" onchange="updatePageTextData()" style="border:none; width:28px; height:22px; cursor:pointer; border-radius:6px;">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="closeSettings()" style="margin-top:6px; justify-content:center;">Kész</button>
+  </div>
+</div>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const { PDFDocument, degrees } = PDFLib;
+
+  /* ===== IKONOK (dinamikusan létrehozott elemekhez) ===== */
+  const ICON_DUPLICATE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const ICON_ROTATE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>';
+  const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/></svg>';
+  const ICON_SETTINGS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-1px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+  const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+  const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+  /* ===== SEGÉDFÜGGVÉNY: LETÖLTÉS ===== */
+  function triggerDownload(blobOrBytes, filename, mimeType) {
+    const blob = blobOrBytes instanceof Blob ? blobOrBytes : new Blob([blobOrBytes], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  }
+
+  /* ===== DOM REFERENCIÁK ===== */
+  const pageGrid = document.getElementById('page-grid');
+  const previewModal = document.getElementById('preview-modal');
+  const modalCanvas = document.getElementById('modal-canvas');
+  const modalTitle = document.getElementById('modal-title');
+  const canvasWrapper = document.getElementById('canvas-wrapper');
+  const ocrResult = document.getElementById('ocr-result');
+  const ocrStatus = document.getElementById('ocr-status');
+  const extractTextBtn = document.getElementById('extract-text-btn');
+  const saveImagesBtn = document.getElementById('save-images-btn');
+  const settingsModal = document.getElementById('settings-modal');
+  const searchInput = document.getElementById('search-input');
+  const pageCountEl = document.getElementById('page-count');
+  const selectionBar = document.getElementById('selection-bar');
+  const selectionCountEl = document.getElementById('selection-count');
+  const dupSelBtn = document.getElementById('dup-sel-btn');
+  const undoToast = document.getElementById('undo-toast');
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const densityToggleBtn = document.getElementById('density-toggle-btn');
+  const exportSelectedBtn = document.getElementById('export-selected-btn');
+  const exportAllBtn = document.getElementById('export-all-btn');
+
+  let loadedPages = [];
+  let pageCounter = 0;
+  let lastFocusedPageId = null;
+  let activePageData = null;
+  let lastSnapshot = null;
+  let undoTimer = null;
+
+  /* ===== TÖBBSZÖRÖS KIJELÖLÉS (piros = szöveg, kék = kép) ===== */
+  let selections = [];
+  let selCounter = 0;
+  let interaction = null;
+  const HANDLE_DIRS = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
+  /* ===== TÉMA ===== */
+  function initTheme() {
+    const saved = localStorage.getItem('legoPdfTheme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    themeToggleBtn.innerHTML = saved === 'light' ? ICON_MOON : ICON_SUN;
+    themeToggleBtn.dataset.tip = saved === 'light' ? 'Sötét téma' : 'Világos téma';
+  }
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('legoPdfTheme', next);
+    themeToggleBtn.innerHTML = next === 'light' ? ICON_MOON : ICON_SUN;
+    themeToggleBtn.dataset.tip = next === 'light' ? 'Sötét téma' : 'Világos téma';
+  }
+
+  /* ===== RÁCS SŰRŰSÉG ===== */
+  const DENSITIES = ['sm', 'md', 'lg'];
+  const DENSITY_LABEL = { sm: 'Kis nézet', md: 'Közepes nézet', lg: 'Nagy nézet' };
+  function initDensity() {
+    applyDensity(localStorage.getItem('legoPdfDensity') || 'md');
+  }
+  function cycleDensity() {
+    const cur = pageGrid.dataset.density || 'md';
+    const next = DENSITIES[(DENSITIES.indexOf(cur) + 1) % DENSITIES.length];
+    applyDensity(next);
+    localStorage.setItem('legoPdfDensity', next);
+  }
+  function applyDensity(size) {
+    pageGrid.dataset.density = size;
+    densityToggleBtn.dataset.tip = DENSITY_LABEL[size];
+  }
+
+  /* ===== DRAG & DROP VÉDELEM + VALÓDI FÁJL FELTÖLTÉS ===== */
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => e.preventDefault());
+
+  pageGrid.addEventListener('dragover', (e) => { e.preventDefault(); pageGrid.classList.add('drag-over'); });
+  pageGrid.addEventListener('dragleave', () => pageGrid.classList.remove('drag-over'));
+  pageGrid.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    pageGrid.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files || []);
+    const pdfFiles = files.filter(f => f.type === 'application/pdf');
+    const imgFiles = files.filter(f => f.type.startsWith('image/'));
+    if (pdfFiles.length) await handlePdfFiles(pdfFiles);
+    if (imgFiles.length) await handleImageFiles(imgFiles);
+  });
+
+  new Sortable(pageGrid, {
+    animation: 200,
+    forceFallback: true,
+    fallbackClass: 'sortable-fallback',
+    filter: '.select-checkbox, .card-actions, .action-btn, .img-options-btn',
+    preventOnFilter: false,
+    easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    onEnd: () => {
+      const newOrderIds = Array.from(pageGrid.children).map(card => card.dataset.id);
+      loadedPages = newOrderIds.map(id => loadedPages.find(p => p.id === id)).filter(Boolean);
+      renumberBadges();
+    }
+  });
+
+  /* ===== FÁJL BETÖLTÉS (gomb + drag&drop közös logika) ===== */
+  document.getElementById('add-pdf-input').addEventListener('change', async (e) => {
+    await handlePdfFiles(e.target.files);
+    e.target.value = '';
+  });
+  document.getElementById('add-image-input').addEventListener('change', async (e) => {
+    await handleImageFiles(e.target.files);
+    e.target.value = '';
+  });
+
+  async function handlePdfFiles(fileList) {
+    const files = Array.from(fileList);
+    for (const file of files) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const pageId = `page-${Date.now()}-${pageCounter++}`;
+          const pageData = { type: 'pdf', id: pageId, fileBuffer: buffer, pageIndex: i - 1, fileName: file.name, rotation: 0, selected: false };
+          loadedPages.push(pageData);
+          await renderPdfPageThumbnail(pageData);
+        }
+      } catch (err) { console.error('PDF betöltési hiba:', err); }
+    }
+    updatePageCount();
+  }
+
+  async function handleImageFiles(fileList) {
+    const files = Array.from(fileList);
+    for (const file of files) {
+      const buffer = await file.arrayBuffer();
+      const pageId = `page-${Date.now()}-${pageCounter++}`;
+      const imgUrl = URL.createObjectURL(new Blob([buffer], { type: file.type }));
+      const pageData = {
+        type: 'image', id: pageId, fileName: file.name,
+        images: [{ buffer, type: file.type, url: imgUrl, scale: 1.0 }],
+        hasText: false,
+        textConfig: { text: '', fontSize: 16, align: 'left', margin: 20, isBold: false, color: '#000000' },
+        fitToWidth: true, rotation: 0, selected: false
+      };
+      loadedPages.push(pageData);
+      await renderImageThumbnail(pageData);
+    }
+    updatePageCount();
+  }
+
+  function insertBlankPage() {
+    const pageId = `page-${Date.now()}-${pageCounter++}`;
+    const pageData = {
+      type: 'blank', id: pageId, fileName: 'Üres lap',
+      images: [], hasText: true,
+      textConfig: { text: '', fontSize: 16, align: 'left', margin: 20, isBold: false, color: '#000000' },
+      fitToWidth: true, rotation: 0, selected: false
+    };
+    loadedPages.push(pageData);
+    renderImageThumbnail(pageData);
+    updatePageCount();
+
+    // Az üres lap létrehozásakor rögtön megnyitjuk a szövegszerkesztőt,
+    // és a kurzort a szövegmezőbe tesszük — a szöveg valódi, szerkeszthető
+    // szöveg marad, csak a PDF exportálásakor lesz belőle kép a lapon.
+    openSettings(pageData);
+    setTimeout(() => {
+      const ta = document.getElementById('page-text-input');
+      if (ta) ta.focus();
+    }, 60);
+  }
+
+  /* ===== MINIATŰR RENDERELÉS ===== */
+  async function renderPdfPageThumbnail(pageData) {
+    const pdfDoc = await pdfjsLib.getDocument({ data: pageData.fileBuffer.slice(0) }).promise;
+    const page = await pdfDoc.getPage(pageData.pageIndex + 1);
+    const viewport = page.getViewport({ scale: 0.32, rotation: pageData.rotation });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    createCard(pageData, canvas, `${pageData.fileName} · ${pageData.pageIndex + 1}. oldal`);
+  }
+
+  async function renderImageThumbnail(pageData) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 160; canvas.height = 226;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const imgs = await Promise.all(pageData.images.map(imgObj => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.src = imgObj.url;
+    })));
+
+    let currentY = 10;
+    pageData.images.forEach((obj, idx) => {
+      const itemImg = imgs[idx];
+      let drawWidth = canvas.width - 20;
+      let drawHeight = (itemImg.height / itemImg.width) * drawWidth;
+      if (!pageData.fitToWidth) { drawWidth *= (obj.scale || 1.0); drawHeight *= (obj.scale || 1.0); }
+      ctx.drawImage(itemImg, 10, currentY, drawWidth, drawHeight);
+      currentY += drawHeight + 10;
+    });
+
+    if (pageData.hasText && pageData.textConfig.text.trim()) {
+      const cfg = pageData.textConfig;
+      const fontPx = Math.max(7, cfg.fontSize * 0.22);
+      const margin = (cfg.margin / 595.28) * canvas.width;
+      const maxWidth = canvas.width - (margin * 2);
+      const layout = layoutRichLines(ctx, tokenizeRichText(cfg.text), maxWidth, fontPx, cfg.isBold);
+      drawRichLines(ctx, layout, margin, currentY + 10, maxWidth, fontPx, cfg.isBold, cfg.color, cfg.align, 10);
+    }
+
+    const label = pageData.type === 'blank' ? 'Üres lap' : pageData.fileName;
+    createCard(pageData, canvas, label);
+  }
+
+  /* ===== GAZDAG SZÖVEG (részleges BOLD "**..**" jelöléssel + sorkizárás) ===== */
+  function parseBoldSegments(rawText) {
+    const segments = [];
+    rawText.split('**').forEach((part, i) => {
+      if (part === '') return;
+      segments.push({ text: part, bold: i % 2 === 1 });
+    });
+    return segments;
+  }
+
+  function tokenizeRichText(rawText) {
+    const segments = parseBoldSegments(rawText || '');
+    const tokens = [];
+    segments.forEach(seg => {
+      seg.text.split('\n').forEach((lineText, li) => {
+        if (li > 0) tokens.push({ type: 'break' });
+        lineText.split(' ').forEach(w => {
+          if (w.length > 0) tokens.push({ type: 'word', text: w, bold: seg.bold });
+        });
+      });
+    });
+    return tokens;
+  }
+
+  function measureWordWidth(ctx, text, fontSizePx, globalBold, segBold, fontFamily) {
+    ctx.font = `${(globalBold || segBold) ? 'bold' : 'normal'} ${fontSizePx}px ${fontFamily || 'sans-serif'}`;
+    return ctx.measureText(text).width;
+  }
+
+  function layoutRichLines(ctx, tokens, maxWidth, fontSizePx, isBold, fontFamily) {
+    const spaceWidth = measureWordWidth(ctx, ' ', fontSizePx, isBold, false, fontFamily) || fontSizePx * 0.28;
+    const lines = [];
+    let current = [];
+    let currentWidth = 0;
+
+    function flush(paragraphEnd) {
+      lines.push({ words: current, paragraphEnd: !!paragraphEnd });
+      current = []; currentWidth = 0;
+    }
+
+    tokens.forEach(tok => {
+      if (tok.type === 'break') { flush(true); return; }
+      const w = measureWordWidth(ctx, tok.text, fontSizePx, isBold, tok.bold, fontFamily);
+      const extra = current.length > 0 ? spaceWidth + w : w;
+      if (current.length > 0 && currentWidth + extra > maxWidth) flush(false);
+      current.push({ text: tok.text, bold: tok.bold, width: w });
+      currentWidth += (current.length > 1 ? spaceWidth : 0) + w;
+    });
+    flush(true);
+
+    return { lines, spaceWidth };
+  }
+
+  function drawRichLines(ctx, layout, x0, y0, maxWidth, fontSizePx, isBold, color, align, lineHeight, fontFamily) {
+    const { lines, spaceWidth } = layout;
+    ctx.fillStyle = color || '#000000';
+    let y = y0;
+
+    lines.forEach(line => {
+      const words = line.words;
+      if (words.length === 0) { y += lineHeight; return; }
+      const naturalWidth = words.reduce((sum, w, i) => sum + w.width + (i > 0 ? spaceWidth : 0), 0);
+      let startX = x0;
+      let gap = spaceWidth;
+
+      if (align === 'center') startX = x0 + (maxWidth - naturalWidth) / 2;
+      else if (align === 'right') startX = x0 + (maxWidth - naturalWidth);
+      else if (align === 'justify' && !line.paragraphEnd && words.length > 1) {
+        gap = spaceWidth + (maxWidth - naturalWidth) / (words.length - 1);
+      }
+
+      let cx = startX;
+      words.forEach(w => {
+        ctx.font = `${(isBold || w.bold) ? 'bold' : 'normal'} ${fontSizePx}px ${fontFamily || 'sans-serif'}`;
+        ctx.fillText(w.text, cx, y);
+        cx += w.width + gap;
+      });
+
+      y += lineHeight;
+    });
+
+    return y - y0;
+  }
+
+  /* ===== KÁRTYA ÉPÍTÉS ===== */
+  function buildCardElement(pageData, canvas, labelText) {
+    const card = document.createElement('div');
+    card.className = 'page-card';
+    card.dataset.id = pageData.id;
+    card.dataset.type = pageData.type;
+    if (pageData.selected) card.classList.add('selected');
+
+    card.innerHTML = `<div class="stud-row"><span class="stud"></span><span class="stud"></span></div><span class="order-badge"></span>`;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox'; checkbox.className = 'select-checkbox';
+    checkbox.checked = pageData.selected;
+    checkbox.onclick = (e) => { e.stopPropagation(); setSelection(pageData, card, checkbox, checkbox.checked); };
+    card.appendChild(checkbox);
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'thumb-wrap';
+    thumbWrap.appendChild(canvas);
+
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'card-actions';
+
+    const dupBtn = document.createElement('button');
+    dupBtn.className = 'action-btn'; dupBtn.title = 'Duplikálás'; dupBtn.innerHTML = ICON_DUPLICATE;
+    dupBtn.onclick = (e) => { e.stopPropagation(); duplicatePage(pageData); };
+
+    const rotateBtn = document.createElement('button');
+    rotateBtn.className = 'action-btn'; rotateBtn.title = 'Forgatás'; rotateBtn.innerHTML = ICON_ROTATE;
+    rotateBtn.onclick = (e) => { e.stopPropagation(); rotatePage(pageData); };
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'action-btn delete'; deleteBtn.title = 'Törlés'; deleteBtn.innerHTML = ICON_TRASH;
+    deleteBtn.onclick = (e) => { e.stopPropagation(); deleteSinglePage(pageData); };
+
+    actionsDiv.append(dupBtn, rotateBtn, deleteBtn);
+    thumbWrap.appendChild(actionsDiv);
+    card.appendChild(thumbWrap);
+
+    const info = document.createElement('div');
+    info.className = 'page-info'; info.innerText = labelText;
+    card.appendChild(info);
+
+    if (pageData.type !== 'pdf') {
+      const optBtn = document.createElement('button');
+      optBtn.className = 'btn btn-secondary img-options-btn';
+      optBtn.innerHTML = `${ICON_SETTINGS} Beállítások`;
+      optBtn.onclick = (e) => { e.stopPropagation(); openSettings(pageData); };
+      card.appendChild(optBtn);
+    }
+
+    card.onclick = () => { setSelection(pageData, card, checkbox, !pageData.selected); setFocusedCard(pageData.id); };
+
+    return card;
+  }
+
+  function createCard(pageData, canvas, labelText) {
+    const existing = pageGrid.querySelector(`[data-id="${pageData.id}"]`);
+    const card = buildCardElement(pageData, canvas, labelText);
+    if (existing) existing.replaceWith(card);
+    else pageGrid.appendChild(card);
+    setFocusedCard(pageData.id);
+    applySearchFilterToCard(card, pageData);
+    renumberBadges();
+  }
+
+  function renumberBadges() {
+    Array.from(pageGrid.children).forEach((card, idx) => {
+      const badge = card.querySelector('.order-badge');
+      if (badge) badge.innerText = idx + 1;
+    });
+  }
+
+  function setFocusedCard(id) {
+    document.querySelectorAll('.page-card').forEach(c => c.classList.remove('focused'));
+    lastFocusedPageId = id;
+    const currentCard = pageGrid.querySelector(`[data-id="${id}"]`);
+    if (currentCard) currentCard.classList.add('focused');
+  }
+
+  /* ===== KIJELÖLÉS ===== */
+  function setSelection(pageData, card, checkbox, value) {
+    pageData.selected = value;
+    checkbox.checked = value;
+    card.classList.toggle('selected', value);
+    updateSelectionBar();
+  }
+
+  function updateSelectionBar() {
+    const count = loadedPages.filter(p => p.selected).length;
+    if (count === 0) { selectionBar.classList.remove('active'); return; }
+    selectionBar.classList.add('active');
+    selectionCountEl.innerText = `${count} kiválasztva`;
+    dupSelBtn.disabled = count !== 1;
+  }
+
+  function clearSelection() {
+    loadedPages.forEach(p => p.selected = false);
+    document.querySelectorAll('.page-card.selected').forEach(c => {
+      c.classList.remove('selected');
+      const cb = c.querySelector('.select-checkbox');
+      if (cb) cb.checked = false;
+    });
+    updateSelectionBar();
+  }
+
+  function toggleSelectAll() {
+    const hasUnselected = loadedPages.some(p => !p.selected);
+    loadedPages.forEach(p => p.selected = hasUnselected);
+    document.querySelectorAll('.page-card').forEach(card => {
+      const pData = loadedPages.find(p => p.id === card.dataset.id);
+      if (pData) {
+        card.classList.toggle('selected', pData.selected);
+        const cb = card.querySelector('.select-checkbox');
+        if (cb) cb.checked = pData.selected;
+      }
+    });
+    updateSelectionBar();
+  }
+
+  /* ===== KERESÉS / SZŰRÉS ===== */
+  function applySearchFilterToCard(card, pageData) {
+    const q = (searchInput.value || '').trim().toLowerCase();
+    const match = !q || pageData.fileName.toLowerCase().includes(q);
+    card.classList.toggle('filtered-out', !match);
+  }
+  function runSearchFilter() {
+    let anyVisible = false;
+    Array.from(pageGrid.children).forEach(card => {
+      const pd = loadedPages.find(p => p.id === card.dataset.id);
+      if (pd) {
+        applySearchFilterToCard(card, pd);
+        if (!card.classList.contains('filtered-out')) anyVisible = true;
+      }
+    });
+    pageGrid.classList.toggle('no-results', loadedPages.length > 0 && !anyVisible);
+  }
+  searchInput.addEventListener('input', runSearchFilter);
+
+  function updatePageCount() {
+    pageCountEl.innerText = `${loadedPages.length} oldal`;
+  }
+
+  /* ===== FORGATÁS / DUPLIKÁLÁS / TÖRLÉS ===== */
+  async function rotatePage(pageData) {
+    pageData.rotation = (pageData.rotation + 90) % 360;
+    if (pageData.type === 'pdf') await renderPdfPageThumbnail(pageData);
+    else await renderImageThumbnail(pageData);
+  }
+
+  async function rotateSelected() {
+    const sel = loadedPages.filter(p => p.selected);
+    for (const pd of sel) { await rotatePage(pd); }
+  }
+
+  function clonePageData(pageData) {
+    const newId = `page-${Date.now()}-${pageCounter++}`;
+    const clone = { ...pageData, id: newId, selected: false };
+    if (pageData.type !== 'pdf') {
+      clone.images = pageData.images.map(im => ({ ...im }));
+      clone.textConfig = { ...pageData.textConfig };
+    }
+    return clone;
+  }
+
+  async function duplicatePage(pageData) {
+    const clone = clonePageData(pageData);
+    const idx = loadedPages.indexOf(pageData);
+    loadedPages.splice(idx + 1, 0, clone);
+
+    if (clone.type === 'pdf') await renderPdfPageThumbnail(clone);
+    else await renderImageThumbnail(clone);
+
+    const newCard = pageGrid.querySelector(`[data-id="${clone.id}"]`);
+    const originalCard = pageGrid.querySelector(`[data-id="${pageData.id}"]`);
+    if (newCard && originalCard) originalCard.after(newCard);
+    renumberBadges();
+    updatePageCount();
+  }
+
+  function duplicateSelectedSingle() {
+    const sel = loadedPages.filter(p => p.selected);
+    if (sel.length !== 1) return;
+    duplicatePage(sel[0]);
+  }
+
+  function deleteSinglePage(pageData) {
+    snapshotForUndo();
+    loadedPages = loadedPages.filter(p => p.id !== pageData.id);
+    const card = pageGrid.querySelector(`[data-id="${pageData.id}"]`);
+    if (card) card.remove();
+    renumberBadges();
+    updatePageCount();
+    updateSelectionBar();
+  }
+
+  function deleteSelectedPages() {
+    const selectedCount = loadedPages.filter(p => p.selected).length;
+    if (selectedCount === 0) return alert('Nincs kijelölve egyetlen oldal sem!');
+    snapshotForUndo();
+    const selectedIds = loadedPages.filter(p => p.selected).map(p => p.id);
+    loadedPages = loadedPages.filter(p => !p.selected);
+    selectedIds.forEach(id => {
+      const card = pageGrid.querySelector(`[data-id="${id}"]`);
+      if (card) card.remove();
+    });
+    renumberBadges();
+    updatePageCount();
+    updateSelectionBar();
+  }
+
+  /* ===== VISSZAVONÁS ===== */
+  function snapshotForUndo() {
+    lastSnapshot = loadedPages.slice();
+    undoToast.classList.add('active');
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => { undoToast.classList.remove('active'); lastSnapshot = null; }, 6000);
+  }
+
+  async function undoLastDelete() {
+    if (!lastSnapshot) return;
+    loadedPages = lastSnapshot;
+    lastSnapshot = null;
+    undoToast.classList.remove('active');
+    clearTimeout(undoTimer);
+    await rebuildGrid();
+  }
+
+  async function rebuildGrid() {
+    pageGrid.innerHTML = '';
+    for (const pd of loadedPages) {
+      if (pd.type === 'pdf') await renderPdfPageThumbnail(pd);
+      else await renderImageThumbnail(pd);
+    }
+    updatePageCount();
+    updateSelectionBar();
+    runSearchFilter();
+  }
+
+  /* ===== OLDAL BEÁLLÍTÁSOK MODAL ===== */
+  function openSettings(pageData) {
+    activePageData = pageData;
+    document.getElementById('fit-checkbox').checked = pageData.fitToWidth;
+
+    const container = document.getElementById('images-list-container');
+    container.innerHTML = '';
+    pageData.images.forEach((imgObj, idx) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:12px;';
+      row.innerHTML = `
+        <span>Kép #${idx + 1}</span>
+        <select onchange="updateImageScale(${idx}, this.value)" style="font-size:11px; border-radius:6px; padding:3px 5px;">
+          <option value="1.0" ${imgObj.scale === 1.0 ? 'selected' : ''}>100%</option>
+          <option value="0.75" ${imgObj.scale === 0.75 ? 'selected' : ''}>75%</option>
+          <option value="0.5" ${imgObj.scale === 0.5 ? 'selected' : ''}>50%</option>
+        </select>
+        ${pageData.images.length > 1 ? `<button onclick="removeImageFromPage(${idx})" class="btn" style="background:var(--lego-red); color:#fff; padding:3px 7px; font-size:10px;">✕</button>` : ''}
+      `;
+      container.appendChild(row);
+    });
+
+    const textCtrl = document.getElementById('text-box-controls');
+    const toggleBtnText = document.getElementById('text-toggle-btn-label');
+
+    if (pageData.hasText) {
+      textCtrl.style.display = 'flex';
+      toggleBtnText.innerText = '✕ Törlés';
+      document.getElementById('page-text-input').value = pageData.textConfig.text;
+      document.getElementById('page-text-size').value = pageData.textConfig.fontSize;
+      document.getElementById('page-text-align').value = pageData.textConfig.align;
+      document.getElementById('page-text-margin').value = pageData.textConfig.margin;
+      document.getElementById('page-text-bold').checked = pageData.textConfig.isBold;
+      document.getElementById('page-text-color').value = pageData.textConfig.color;
+    } else {
+      textCtrl.style.display = 'none';
+      toggleBtnText.innerText = '+ Szöveg hozzáadása';
+    }
+
+    settingsModal.classList.add('active');
+  }
+
+  function closeSettings() {
+    settingsModal.classList.remove('active');
+    if (activePageData) renderImageThumbnail(activePageData);
+  }
+
+  function togglePageText() {
+    if (!activePageData) return;
+    activePageData.hasText = !activePageData.hasText;
+    openSettings(activePageData);
+    renderImageThumbnail(activePageData);
+  }
+
+  function updatePageTextData() {
+    if (!activePageData || !activePageData.hasText) return;
+    activePageData.textConfig.text = document.getElementById('page-text-input').value;
+    activePageData.textConfig.fontSize = parseInt(document.getElementById('page-text-size').value, 10) || 16;
+    activePageData.textConfig.align = document.getElementById('page-text-align').value;
+    activePageData.textConfig.margin = parseInt(document.getElementById('page-text-margin').value, 10) || 20;
+    activePageData.textConfig.isBold = document.getElementById('page-text-bold').checked;
+    activePageData.textConfig.color = document.getElementById('page-text-color').value;
+    renderImageThumbnail(activePageData);
+  }
+
+  /* ---- Ctrl/Cmd+B: kijelölt rész félkövérré tétele "**..**" jelöléssel ---- */
+  function toggleBoldOnSelection() {
+    const ta = document.getElementById('page-text-input');
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (start === end) return;
+    const value = ta.value;
+    const selected = value.slice(start, end);
+
+    if (selected.length >= 4 && selected.startsWith('**') && selected.endsWith('**')) {
+      const unwrapped = selected.slice(2, -2);
+      ta.value = value.slice(0, start) + unwrapped + value.slice(end);
+      ta.selectionStart = start; ta.selectionEnd = start + unwrapped.length;
+    } else if (value.slice(start - 2, start) === '**' && value.slice(end, end + 2) === '**') {
+      ta.value = value.slice(0, start - 2) + selected + value.slice(end + 2);
+      ta.selectionStart = start - 2; ta.selectionEnd = start - 2 + selected.length;
+    } else {
+      const wrapped = `**${selected}**`;
+      ta.value = value.slice(0, start) + wrapped + value.slice(end);
+      ta.selectionStart = start; ta.selectionEnd = start + wrapped.length;
+    }
+
+    ta.focus();
+    updatePageTextData();
+  }
+
+  document.getElementById('page-text-input').addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      toggleBoldOnSelection();
+    }
+  });
+
+  function updateImageFit(isFit) {
+    if (activePageData) { activePageData.fitToWidth = isFit; renderImageThumbnail(activePageData); }
+  }
+
+  function updateImageScale(index, value) {
+    if (activePageData) { activePageData.images[index].scale = parseFloat(value); renderImageThumbnail(activePageData); }
+  }
+
+  async function addImageToCurrentPage(e) {
+    const file = e.target.files[0];
+    if (!file || !activePageData) return;
+    const buffer = await file.arrayBuffer();
+    const imgUrl = URL.createObjectURL(new Blob([buffer], { type: file.type }));
+    activePageData.images.push({ buffer, type: file.type, url: imgUrl, scale: 1.0 });
+    openSettings(activePageData);
+    renderImageThumbnail(activePageData);
+    e.target.value = '';
+  }
+
+  function removeImageFromPage(index) {
+    if (activePageData && activePageData.images.length > 1) {
+      activePageData.images.splice(index, 1);
+      openSettings(activePageData);
+      renderImageThumbnail(activePageData);
+    }
+  }
+
+  /* ===== GYORSNÉZET / OCR / SZÖVEGKINYERÉS ===== */
+  async function openQuickLook() {
+    if (previewModal.classList.contains('active')) { closeModal(); return; }
+    let targetPage = loadedPages.find(p => p.id === lastFocusedPageId) || loadedPages[0];
+    if (!targetPage) return;
+
+    try {
+      clearSelections();
+      const ctx = modalCanvas.getContext('2d');
+      ocrResult.value = '';
+      ocrStatus.innerText = '📝 Felismert szöveg:';
+
+      if (targetPage.type === 'pdf') {
+        const pdfDoc = await pdfjsLib.getDocument({ data: targetPage.fileBuffer.slice(0) }).promise;
+        const page = await pdfDoc.getPage(targetPage.pageIndex + 1);
+        const viewport = page.getViewport({ scale: 1.5, rotation: targetPage.rotation });
+        modalCanvas.height = viewport.height; modalCanvas.width = viewport.width;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+      } else {
+        const pageWidth = 595.28 * 1.5, pageHeight = 841.89 * 1.5;
+        modalCanvas.width = pageWidth; modalCanvas.height = pageHeight;
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, pageWidth, pageHeight);
+
+        let currentY = 20;
+        for (const imgObj of targetPage.images) {
+          const img = new Image(); img.src = imgObj.url;
+          await new Promise(resolve => img.onload = resolve);
+          let drawWidth = pageWidth - 40;
+          let drawHeight = (img.height / img.width) * drawWidth;
+          if (!targetPage.fitToWidth) { drawWidth = img.width * (imgObj.scale || 1.0); drawHeight = img.height * (imgObj.scale || 1.0); }
+          ctx.drawImage(img, 20, currentY, drawWidth, drawHeight);
+          currentY += drawHeight + 20;
+        }
+
+        if (targetPage.hasText && targetPage.textConfig.text.trim()) {
+          const cfg = targetPage.textConfig;
+          const fontPx = cfg.fontSize * 1.5;
+          const margin = cfg.margin * 1.5;
+          const maxWidth = pageWidth - (margin * 2);
+          const layout = layoutRichLines(ctx, tokenizeRichText(cfg.text), maxWidth, fontPx, cfg.isBold);
+          drawRichLines(ctx, layout, margin, currentY + 10, maxWidth, fontPx, cfg.isBold, cfg.color, cfg.align, cfg.fontSize * 2);
+        }
+      }
+
+      modalTitle.innerText = targetPage.fileName;
+      extractTextBtn.disabled = targetPage.type !== 'pdf';
+      previewModal.classList.add('active');
+    } catch (err) { console.error(err); }
+  }
+
+  function closeModal() {
+    previewModal.classList.remove('active');
+  }
+
+  async function extractPdfText() {
+    const targetPage = loadedPages.find(p => p.id === lastFocusedPageId) || loadedPages[0];
+    if (!targetPage || targetPage.type !== 'pdf') {
+      ocrStatus.innerText = '⚠️ Csak PDF oldalból nyerhető ki szövegréteg';
+      ocrResult.value = 'Ehhez az oldaltípushoz nincs beágyazott szöveg. Jelölj ki egy területet OCR-hez.';
+      return;
+    }
+    ocrStatus.innerText = '⏳ Szövegréteg kiolvasása...';
+    ocrResult.value = '';
+    try {
+      const pdfDoc = await pdfjsLib.getDocument({ data: targetPage.fileBuffer.slice(0) }).promise;
+      const page = await pdfDoc.getPage(targetPage.pageIndex + 1);
+      const textContent = await page.getTextContent();
+      const text = textContent.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
+      if (!text) {
+        ocrStatus.innerText = '⚠️ Nincs kinyerhető szövegréteg';
+        ocrResult.value = 'Ez valószínűleg egy szkennelt (kép alapú) oldal — jelölj ki egy területet OCR-hez.';
+      } else {
+        ocrStatus.innerText = '📄 PDF szövegréteg:';
+        ocrResult.value = text;
+      }
+    } catch (err) {
+      ocrStatus.innerText = '❌ Hiba a szöveg kiolvasásakor';
+      ocrResult.value = err.message;
+    }
+  }
+
+  /* ---- kijelölés-doboz DOM építés és pozicionálás ---- */
+  function createSelectionBoxElement(box) {
+    const el = document.createElement('div');
+    el.className = `sel-box sel-box-${box.type}`;
+    el.dataset.id = box.id;
+
+    const badge = document.createElement('span');
+    badge.className = 'sel-box-badge';
+    el.appendChild(badge);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'sel-box-remove';
+    removeBtn.title = 'Kijelölés törlése';
+    removeBtn.innerHTML = '×';
+    removeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+    removeBtn.addEventListener('click', (e) => { e.stopPropagation(); removeSelection(box.id); });
+    el.appendChild(removeBtn);
+
+    HANDLE_DIRS.forEach(dir => {
+      const h = document.createElement('div');
+      h.className = `sel-handle sel-handle-${dir}`;
+      h.dataset.handle = dir;
+      el.appendChild(h);
+    });
+
+    return el;
+  }
+
+  function addSelectionBox(type, x, y) {
+    const id = `sel-${selCounter++}`;
+    const box = { id, type, left: x, top: y, width: 0, height: 0 };
+    box.el = createSelectionBoxElement(box);
+    canvasWrapper.appendChild(box.el);
+    selections.push(box);
+    syncBoxElement(box);
+    renumberSelectionBadges();
+    return box;
+  }
+
+  function removeSelection(id) {
+    const idx = selections.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    selections[idx].el.remove();
+    selections.splice(idx, 1);
+    renumberSelectionBadges();
+  }
+
+  function clearSelections() {
+    selections.forEach(s => s.el.remove());
+    selections = [];
+  }
+
+  function clearSelectionsByType(type) {
+    selections = selections.filter(s => {
+      if (s.type === type) { s.el.remove(); return false; }
+      return true;
+    });
+    renumberSelectionBadges();
+  }
+
+  function renumberSelectionBadges() {
+    let textCount = 0, imageCount = 0;
+    selections.forEach(box => {
+      const n = box.type === 'text' ? ++textCount : ++imageCount;
+      const badge = box.el.querySelector('.sel-box-badge');
+      if (badge) badge.innerText = n;
+    });
+  }
+
+  function syncBoxElement(box) {
+    const rect = modalCanvas.getBoundingClientRect();
+    const scaleX = rect.width / modalCanvas.width;
+    const scaleY = rect.height / modalCanvas.height;
+    box.el.style.left = `${modalCanvas.offsetLeft + box.left * scaleX}px`;
+    box.el.style.top = `${modalCanvas.offsetTop + box.top * scaleY}px`;
+    box.el.style.width = `${Math.max(1, box.width * scaleX)}px`;
+    box.el.style.height = `${Math.max(1, box.height * scaleY)}px`;
+  }
+
+  function eventToCanvasPoint(e) {
+    const rect = modalCanvas.getBoundingClientRect();
+    const scaleX = modalCanvas.width / rect.width;
+    const scaleY = modalCanvas.height / rect.height;
+    return {
+      x: Math.max(0, Math.min(modalCanvas.width, (e.clientX - rect.left) * scaleX)),
+      y: Math.max(0, Math.min(modalCanvas.height, (e.clientY - rect.top) * scaleY))
+    };
+  }
+
+  function resizeBoxByHandle(box, inter, pt) {
+    const dx = pt.x - inter.start.x;
+    const dy = pt.y - inter.start.y;
+    let { left, top, width, height } = inter.orig;
+    const handle = inter.handle;
+
+    if (handle.includes('e')) width = Math.max(6, inter.orig.width + dx);
+    if (handle.includes('s')) height = Math.max(6, inter.orig.height + dy);
+    if (handle.includes('w')) { width = Math.max(6, inter.orig.width - dx); left = inter.orig.left + (inter.orig.width - width); }
+    if (handle.includes('n')) { height = Math.max(6, inter.orig.height - dy); top = inter.orig.top + (inter.orig.height - height); }
+
+    left = Math.max(0, left);
+    top = Math.max(0, top);
+    if (left + width > modalCanvas.width) width = modalCanvas.width - left;
+    if (top + height > modalCanvas.height) height = modalCanvas.height - top;
+
+    box.left = left; box.top = top; box.width = width; box.height = height;
+  }
+
+  /* ---- egérkezelés: létrehozás / átméretezés / mozgatás ---- */
+  canvasWrapper.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  canvasWrapper.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.sel-box-remove')) return;
+    const handleEl = e.target.closest('.sel-handle');
+    const boxEl = e.target.closest('.sel-box');
+
+    if (e.button === 2) {
+      e.preventDefault();
+      const pt = eventToCanvasPoint(e);
+      const box = addSelectionBox('image', pt.x, pt.y);
+      interaction = { mode: 'create', id: box.id, start: pt, hasDragged: false };
+      return;
+    }
+
+    if (e.button !== 0) return;
+
+    if (handleEl && boxEl) {
+      const box = selections.find(s => s.id === boxEl.dataset.id);
+      if (!box) return;
+      interaction = { mode: 'resize', id: box.id, handle: handleEl.dataset.handle, start: eventToCanvasPoint(e), orig: { left: box.left, top: box.top, width: box.width, height: box.height } };
+      return;
+    }
+
+    if (boxEl) {
+      const box = selections.find(s => s.id === boxEl.dataset.id);
+      if (!box) return;
+      interaction = { mode: 'move', id: box.id, start: eventToCanvasPoint(e), orig: { left: box.left, top: box.top } };
+      return;
+    }
+
+    if (!e.shiftKey) clearSelectionsByType('text');
+    const pt = eventToCanvasPoint(e);
+    const box = addSelectionBox('text', pt.x, pt.y);
+    interaction = { mode: 'create', id: box.id, start: pt, hasDragged: false };
+  });
+
+  canvasWrapper.addEventListener('mousemove', (e) => {
+    if (!interaction) return;
+    const box = selections.find(s => s.id === interaction.id);
+    if (!box) return;
+    const pt = eventToCanvasPoint(e);
+
+    if (interaction.mode === 'create') {
+      const left = Math.min(interaction.start.x, pt.x);
+      const top = Math.min(interaction.start.y, pt.y);
+      const width = Math.abs(pt.x - interaction.start.x);
+      const height = Math.abs(pt.y - interaction.start.y);
+      if (width > 4 || height > 4) interaction.hasDragged = true;
+      box.left = left; box.top = top; box.width = width; box.height = height;
+    } else if (interaction.mode === 'move') {
+      const dx = pt.x - interaction.start.x;
+      const dy = pt.y - interaction.start.y;
+      box.left = Math.max(0, Math.min(modalCanvas.width - box.width, interaction.orig.left + dx));
+      box.top = Math.max(0, Math.min(modalCanvas.height - box.height, interaction.orig.top + dy));
+    } else if (interaction.mode === 'resize') {
+      resizeBoxByHandle(box, interaction, pt);
+    }
+
+    syncBoxElement(box);
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!interaction) return;
+    if (interaction.mode === 'create') {
+      const box = selections.find(s => s.id === interaction.id);
+      if (box && (!interaction.hasDragged || box.width < 6 || box.height < 6)) {
+        removeSelection(box.id);
+      }
+    }
+    interaction = null;
+  });
+
+  /* ---- kijelölések feldolgozása: OCR (piros) és kép mentés (kék) ---- */
+  async function processAllOCR() {
+    const textBoxes = selections.filter(s => s.type === 'text');
+    if (textBoxes.length === 0) { alert('Nincs piros (szöveg) kijelölés a képen!'); return; }
+
+    ocrStatus.innerText = '⏳ Szöveg felismerése...';
+    ocrResult.value = 'Felismerés...';
+
+    try {
+      const worker = await Tesseract.createWorker('hun');
+      const parts = [];
+      for (let i = 0; i < textBoxes.length; i++) {
+        const box = textBoxes[i];
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = box.width; cropCanvas.height = box.height;
+        const ctx = cropCanvas.getContext('2d');
+        ctx.drawImage(modalCanvas, box.left, box.top, box.width, box.height, 0, 0, box.width, box.height);
+        const ret = await worker.recognize(cropCanvas.toDataURL());
+        parts.push(textBoxes.length > 1 ? `— ${i + 1}. szövegrész —\n${ret.data.text.trim()}` : ret.data.text.trim());
+      }
+      await worker.terminate();
+      ocrResult.value = parts.join('\n\n');
+      ocrStatus.innerText = `📝 Felismert szöveg (${textBoxes.length} db piros kijelölésből):`;
+    } catch (err) {
+      ocrStatus.innerText = '❌ Hiba a felismeréskor';
+      ocrResult.value = 'Nem sikerült kiolvasni a szöveget. ' + err.message;
+    }
+  }
+
+  function copyOcrText() {
+    if (!ocrResult.value) return;
+    navigator.clipboard.writeText(ocrResult.value);
+    const prev = ocrStatus.innerText;
+    ocrStatus.innerText = '✅ Másolva a vágólapra!';
+    setTimeout(() => { ocrStatus.innerText = prev; }, 2000);
+  }
+
+  function canvasToBlobAsync(canvas) {
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  }
+
+  async function saveAllCroppedImages() {
+    const imageBoxes = selections.filter(s => s.type === 'image');
+    if (imageBoxes.length === 0) { alert('Nincs kék (kép) kijelölés a képen!'); return; }
+
+    const originalLabel = saveImagesBtn.innerHTML;
+    saveImagesBtn.disabled = true;
+    saveImagesBtn.innerHTML = '<span class="spinner"></span> Mentés…';
+
+    try {
+      if (imageBoxes.length === 1) {
+        const box = imageBoxes[0];
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = box.width; cropCanvas.height = box.height;
+        const ctx = cropCanvas.getContext('2d');
+        ctx.drawImage(modalCanvas, box.left, box.top, box.width, box.height, 0, 0, box.width, box.height);
+        const blob = await canvasToBlobAsync(cropCanvas);
+        triggerDownload(blob, 'kivagas.png', 'image/png');
+        return;
+      }
+
+      // Több kép esetén egyetlen ZIP-be csomagolva töltjük le őket —
+      // így minden kép garantáltan lementődik külön fájlként a
+      // csomagon belül, a böngésző pedig nem blokkolja a letöltést
+      // (több egymást követő automatikus letöltést sok böngésző
+      // az elsőn túl elutasít).
+      const zip = new JSZip();
+      for (let i = 0; i < imageBoxes.length; i++) {
+        const box = imageBoxes[i];
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = box.width; cropCanvas.height = box.height;
+        const ctx = cropCanvas.getContext('2d');
+        ctx.drawImage(modalCanvas, box.left, box.top, box.width, box.height, 0, 0, box.width, box.height);
+        const blob = await canvasToBlobAsync(cropCanvas);
+        zip.file(`kivagas_${i + 1}.png`, blob);
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      triggerDownload(zipBlob, 'kivagasok.zip', 'application/zip');
+    } catch (err) {
+      alert('Hiba a képek mentésekor: ' + err.message);
+    } finally {
+      saveImagesBtn.disabled = false;
+      saveImagesBtn.innerHTML = originalLabel;
+    }
+  }
+
+  /* ===== BILLENTYŰPARANCSOK ===== */
+  window.addEventListener('keydown', (e) => {
+    const tag = document.activeElement.tagName;
+    const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable;
+
+    if (e.code === 'Space' && !isTyping) { e.preventDefault(); openQuickLook(); return; }
+
+    if (e.code === 'Escape') {
+      if (previewModal.classList.contains('active')) closeModal();
+      else if (settingsModal.classList.contains('active')) closeSettings();
+      else clearSelection();
+      return;
+    }
+
+    if (isTyping) return;
+
+    if ((e.key === 'Delete' || e.key === 'Backspace') && loadedPages.some(p => p.selected)) {
+      e.preventDefault(); deleteSelectedPages(); return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault(); toggleSelectAllForce(true); return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); undoLastDelete(); return;
+    }
+  });
+
+  function toggleSelectAllForce(value) {
+    loadedPages.forEach(p => p.selected = value);
+    document.querySelectorAll('.page-card').forEach(card => {
+      const pData = loadedPages.find(p => p.id === card.dataset.id);
+      if (pData) {
+        card.classList.toggle('selected', pData.selected);
+        const cb = card.querySelector('.select-checkbox');
+        if (cb) cb.checked = pData.selected;
+      }
+    });
+    updateSelectionBar();
+  }
+
+  /* ===== PDF EXPORT ===== */
+  async function renderTextToPngBytes(textConfig) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const fontFamily = '-apple-system, BlinkMacSystemFont, Arial, sans-serif';
+
+    const width = 595.28;
+    const margin = textConfig.margin || 20;
+    const maxWidth = width - (margin * 2);
+    const fontSize = textConfig.fontSize || 16;
+    const lineHeight = fontSize * 1.35;
+
+    const layout = layoutRichLines(ctx, tokenizeRichText(textConfig.text), maxWidth, fontSize, textConfig.isBold, fontFamily);
+    const height = Math.max(20, layout.lines.length * lineHeight + 10);
+
+    canvas.width = width;
+    canvas.height = height;
+    ctx.textBaseline = 'top';
+
+    drawRichLines(ctx, layout, margin, 5, maxWidth, fontSize, textConfig.isBold, textConfig.color, textConfig.align, lineHeight, fontFamily);
+
+    return new Promise((resolve) => {
+      canvas.toBlob(async (blob) => {
+        const arrayBuffer = await blob.arrayBuffer();
+        resolve({ buffer: arrayBuffer, height });
+      }, 'image/png');
+    });
+  }
+
+  async function exportPDF(onlySelected = false) {
+    const targetPages = onlySelected ? loadedPages.filter(p => p.selected) : loadedPages;
+    if (targetPages.length === 0) return alert('Nincs kiválasztva oldal!');
+
+    const btn = onlySelected ? exportSelectedBtn : exportAllBtn;
+    const originalLabel = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Exportálás…';
+
+    try {
+      const mergedPdf = await PDFDocument.create();
+
+      for (const pageData of targetPages) {
+        if (pageData.type === 'pdf') {
+          const sourcePdfDoc = await PDFDocument.load(pageData.fileBuffer.slice(0));
+          const [copiedPage] = await mergedPdf.copyPages(sourcePdfDoc, [pageData.pageIndex]);
+          if (pageData.rotation !== 0) copiedPage.setRotation(degrees(pageData.rotation));
+          mergedPdf.addPage(copiedPage);
+        } else {
+          const pdfPage = mergedPdf.addPage([595.28, 841.89]);
+          let currentY = 841.89 - 20;
+
+          for (const imgObj of pageData.images) {
+            let embeddedImg = imgObj.type.includes('png') ?
+              await mergedPdf.embedPng(imgObj.buffer) : await mergedPdf.embedJpg(imgObj.buffer);
+
+            let drawWidth = 595.28 - 40;
+            let drawHeight = (embeddedImg.height / embeddedImg.width) * drawWidth;
+
+            if (!pageData.fitToWidth) {
+              drawWidth = embeddedImg.width * (imgObj.scale || 1.0);
+              drawHeight = embeddedImg.height * (imgObj.scale || 1.0);
+            }
+
+            currentY -= drawHeight;
+            pdfPage.drawImage(embeddedImg, { x: 20, y: currentY, width: drawWidth, height: drawHeight });
+            currentY -= 20;
+          }
+
+          if (pageData.hasText && pageData.textConfig.text.trim()) {
+            const { buffer: textImgBuffer, height: textImgHeight } = await renderTextToPngBytes(pageData.textConfig);
+            const embeddedTextImg = await mergedPdf.embedPng(textImgBuffer);
+            currentY -= textImgHeight;
+            pdfPage.drawImage(embeddedTextImg, { x: 0, y: currentY, width: 595.28, height: textImgHeight });
+          }
+
+          if (pageData.rotation !== 0) pdfPage.setRotation(degrees(pageData.rotation));
+        }
+      }
+
+      const pdfBytes = await mergedPdf.save();
+      triggerDownload(pdfBytes, onlySelected ? 'kijelolt_oldalak.pdf' : 'osszes_oldal.pdf', 'application/pdf');
+    } catch (err) {
+      alert('Hiba exportáláskor: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
+    }
+  }
+
+  // Modal bezárása kívülre kattintáskor (a settings-modal saját onclick="closeSettings()" attribútummal rendelkezik a HTML-ben)
+  window.addEventListener('click', (e) => {
+    if (e.target === previewModal) closeModal();
+  });
+
+  // Inicializálás
+  initTheme();
+  initDensity();
+  updatePageCount();
+  updateSelectionBar();
+</script>
+
+</body>
+</html>
